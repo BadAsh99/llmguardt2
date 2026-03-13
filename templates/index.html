@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLMGuard — OWASP LLM Top 10 Red-Teaming</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --accent:    #58a6ff;
+      --accent2:   #388bfd;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --critical:  #f85149;
+      --high:      #f0883e;
+      --medium:    #d29922;
+      --low:       #3fb950;
+      --info:      #58a6ff;
+      --vuln:      #f85149;
+      --partial:   #f0883e;
+      --resistant: #3fb950;
+      --review:    #d29922;
+      --error:     #6e7681;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      grid-template-columns: 340px 1fr;
+      grid-template-areas:
+        "header header"
+        "sidebar main";
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      grid-area: header;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #f85149, #58a6ff);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .status-dot.scanning { background: var(--low); box-shadow: 0 0 8px var(--low); animation: pulse 1s infinite; }
+    .status-dot.done     { background: var(--accent); }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ── Sidebar ───────────────────────────────────────────────── */
+    aside {
+      grid-area: sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Form controls ─────────────────────────────────────────── */
+    .form-group { margin-bottom: 16px; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input, select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus { border-color: var(--accent); }
+
+    input[type="password"] { letter-spacing: 2px; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+
+    /* ── Category checkboxes ───────────────────────────────────── */
+    .category-grid { display: flex; flex-direction: column; gap: 6px; }
+
+    .category-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+
+    .category-item:hover { background: var(--surface2); }
+    .category-item.checked { border-color: var(--accent); background: rgba(88,166,255,0.06); }
+
+    .category-item input[type="checkbox"] {
+      width: auto;
+      accent-color: var(--accent);
+    }
+
+    .cat-info { flex: 1; min-width: 0; }
+
+    .cat-id {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.5px;
+    }
+
+    .cat-name {
+      font-size: 12px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cat-count {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* ── Scan button ───────────────────────────────────────────── */
+    .btn-scan {
+      width: 100%;
+      padding: 11px;
+      background: linear-gradient(135deg, #f85149, #388bfd);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 4px;
+    }
+
+    .btn-scan:hover:not(:disabled) { opacity: 0.9; }
+    .btn-scan:active:not(:disabled) { transform: scale(0.98); }
+    .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Main content ──────────────────────────────────────────── */
+    main {
+      grid-area: main;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Stats bar ─────────────────────────────────────────────── */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 64px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .stat-card.vuln     .stat-value { color: var(--vuln); }
+    .stat-card.partial  .stat-value { color: var(--partial); }
+    .stat-card.resistant .stat-value { color: var(--resistant); }
+    .stat-card.review   .stat-value { color: var(--review); }
+    .stat-card.total    .stat-value { color: var(--text); }
+
+    /* Risk score gauge */
+    .risk-gauge {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .risk-label { font-size: 12px; color: var(--muted); }
+
+    .gauge-wrap {
+      position: relative;
+      width: 56px;
+      height: 56px;
+    }
+
+    .gauge-svg { transform: rotate(-90deg); }
+
+    .gauge-bg   { fill: none; stroke: var(--surface2); stroke-width: 6; }
+    .gauge-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease, stroke 0.4s; }
+
+    .gauge-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      flex: 1;
+      max-width: 200px;
+    }
+
+    .progress-bar-outer {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      border-radius: 3px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    .progress-text {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Results panel ─────────────────────────────────────────── */
+    .results-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 24px;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .results-title { font-size: 13px; font-weight: 600; }
+
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity 0.15s;
+    }
+    .pill.active { border-color: currentColor; }
+    .pill:hover  { opacity: 0.8; }
+    .pill-all      { color: var(--text); border-color: var(--border); }
+    .pill-vuln     { color: var(--vuln); }
+    .pill-partial  { color: var(--partial); }
+    .pill-resistant{ color: var(--resistant); }
+    .pill-review   { color: var(--review); }
+
+    .results-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* ── Empty / welcome state ─────────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .empty-icon { font-size: 48px; opacity: 0.4; }
+    .empty-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .empty-sub   { font-size: 13px; text-align: center; max-width: 340px; }
+
+    /* ── Result cards ──────────────────────────────────────────── */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .result-card:hover { border-color: var(--accent); }
+
+    .result-card.status-VULNERABLE { border-left: 3px solid var(--vuln); }
+    .result-card.status-PARTIAL    { border-left: 3px solid var(--partial); }
+    .result-card.status-RESISTANT  { border-left: 3px solid var(--resistant); }
+    .result-card.status-REVIEW     { border-left: 3px solid var(--review); }
+    .result-card.status-ERROR      { border-left: 3px solid var(--error); }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .status-badge.VULNERABLE { background: rgba(248,81,73,0.15); color: var(--vuln); }
+    .status-badge.PARTIAL    { background: rgba(240,136,62,0.15); color: var(--partial); }
+    .status-badge.RESISTANT  { background: rgba(63,185,80,0.15);  color: var(--resistant); }
+    .status-badge.REVIEW     { background: rgba(210,153,34,0.15); color: var(--review); }
+    .status-badge.ERROR      { background: rgba(110,118,129,0.15); color: var(--error); }
+
+    .result-name {
+      font-size: 13px;
+      font-weight: 600;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .sev-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .sev-dot.critical { background: var(--critical); }
+    .sev-dot.high     { background: var(--high); }
+    .sev-dot.medium   { background: var(--medium); }
+    .sev-dot.low      { background: var(--low); }
+    .sev-dot.info     { background: var(--info); }
+
+    .chevron { transition: transform 0.2s; font-size: 10px; color: var(--muted); }
+    .result-card.expanded .chevron { transform: rotate(90deg); }
+
+    .result-body {
+      display: none;
+      padding: 0 14px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .result-card.expanded .result-body { display: block; }
+
+    .result-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      margin: 12px 0 4px;
+    }
+
+    .result-description { font-size: 12px; color: var(--muted); }
+
+    pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .signals {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .signal-tag {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .signal-tag.hit {
+      background: rgba(248,81,73,0.12);
+      border-color: rgba(248,81,73,0.3);
+      color: var(--vuln);
+    }
+
+    .confidence-bar {
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s;
+    }
+
+    /* ── Scrollbar styling ─────────────────────────────────────── */
+    ::-webkit-scrollbar            { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track      { background: transparent; }
+    ::-webkit-scrollbar-thumb      { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover{ background: var(--muted); }
+
+    /* ── Attack Surface Chart ──────────────────────────────────── */
+    .chart-section {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .chart-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 36px;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .bar-cat-id { color: var(--accent); font-weight: 700; text-align: right; }
+    .bar-outer  { height: 10px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+    .bar-inner  { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    .bar-count  { color: var(--muted); text-align: right; }
+
+    /* ── Responsive tweaks ─────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 56px auto 1fr;
+        grid-template-areas: "header" "sidebar" "main";
+        height: auto;
+        overflow: auto;
+      }
+      aside { max-height: 70vh; }
+      main  { min-height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🛡</div>
+      LLMGuard
+    </div>
+    <span class="badge">OWASP LLM Top 10</span>
+    <span class="badge">v1.0</span>
+    <div class="header-right">
+      <span id="statusLabel" style="font-size:12px;color:var(--muted)">Idle</span>
+      <div class="status-dot" id="statusDot"></div>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ────────────────────────────────────────────────── -->
+  <aside>
+    <div class="sidebar-scroll">
+
+      <!-- Target config -->
+      <div class="section-title">Target Configuration</div>
+
+      <div class="form-group">
+        <label>Provider</label>
+        <select id="provider">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Model</label>
+        <select id="model">
+          <optgroup label="Anthropic" id="anthropicModels">
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+          </optgroup>
+          <optgroup label="OpenAI" id="openaiModels" style="display:none">
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="sk-... or sk-ant-..." />
+      </div>
+
+      <div class="form-group">
+        <label>Delay Between Requests (seconds)</label>
+        <input type="number" id="delay" value="1" min="0" max="10" step="0.5" />
+      </div>
+
+      <div class="form-group">
+        <label>System Prompt <span style="color:var(--muted);font-weight:400">(optional — sets target context)</span></label>
+        <textarea id="systemPrompt" rows="3"
+          placeholder="You are a helpful customer support assistant for Acme Corp..."
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                 color:var(--text);padding:8px 10px;font-size:12px;font-family:inherit;
+                 outline:none;resize:vertical;line-height:1.5;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='var(--accent)'"
+          onblur="this.style.borderColor='var(--border)'"
+        ></textarea>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Category selection -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="section-title" style="margin-bottom:0">Attack Categories</div>
+        <div style="display:flex;gap:6px;">
+          <span style="font-size:11px;color:var(--accent);cursor:pointer;" onclick="toggleAll(true)">All</span>
+          <span style="font-size:11px;color:var(--muted)">|</span>
+          <span style="font-size:11px;color:var(--muted);cursor:pointer;" onclick="toggleAll(false)">None</span>
+        </div>
+      </div>
+
+      <div class="category-grid" id="categoryGrid">
+        <!-- populated by JS -->
+      </div>
+
+      <hr class="divider" />
+
+      <div style="display:flex;gap:8px;">
+        <button class="btn-scan" id="scanBtn" onclick="startScan()" style="flex:1">
+          ⚡ Run Scan
+        </button>
+        <button id="stopBtn" onclick="stopScan()" disabled
+          style="padding:11px 16px;background:var(--surface2);border:1px solid var(--border);
+                 border-radius:8px;color:var(--muted);font-size:13px;font-weight:600;
+                 cursor:pointer;transition:all 0.2s;white-space:nowrap;"
+          onmouseover="if(!this.disabled)this.style.borderColor='var(--vuln)'"
+          onmouseout="this.style.borderColor='var(--border)'">
+          ⏹ Stop
+        </button>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ── Main ───────────────────────────────────────────────────── -->
+  <main>
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat-card total">
+        <div class="stat-value" id="statTotal">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card vuln">
+        <div class="stat-value" id="statVuln">0</div>
+        <div class="stat-label">Vulnerable</div>
+      </div>
+      <div class="stat-card partial">
+        <div class="stat-value" id="statPartial">0</div>
+        <div class="stat-label">Partial</div>
+      </div>
+      <div class="stat-card resistant">
+        <div class="stat-value" id="statResistant">0</div>
+        <div class="stat-label">Resistant</div>
+      </div>
+      <div class="stat-card review">
+        <div class="stat-value" id="statReview">0</div>
+        <div class="stat-label">Review</div>
+      </div>
+      <div class="progress-wrap" id="progressWrap" style="display:none">
+        <div class="progress-bar-outer">
+          <div class="progress-bar-inner" id="progressBar"></div>
+        </div>
+        <div class="progress-text" id="progressText">0 / 0</div>
+      </div>
+      <div class="risk-gauge">
+        <div class="risk-label">Risk Score</div>
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" width="56" height="56" viewBox="0 0 56 56">
+            <circle class="gauge-bg"   cx="28" cy="28" r="22"/>
+            <circle class="gauge-fill" cx="28" cy="28" r="22"
+                    id="gaugeFill"
+                    stroke-dasharray="138.2"
+                    stroke-dashoffset="138.2"
+                    stroke="var(--resistant)"/>
+          </svg>
+          <div class="gauge-text" id="gaugeText">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attack surface chart (hidden until scan complete) -->
+    <div class="chart-section" id="chartSection" style="display:none">
+      <div class="chart-title">Attack Surface — Vulnerability by Category</div>
+      <div class="bar-chart" id="barChart"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-wrap">
+      <div class="results-header">
+        <div class="results-title">Scan Results</div>
+        <div class="filter-pills">
+          <span class="pill pill-all active"      onclick="filterResults('ALL')">All</span>
+          <span class="pill pill-vuln"             onclick="filterResults('VULNERABLE')">Vulnerable</span>
+          <span class="pill pill-partial"          onclick="filterResults('PARTIAL')">Partial</span>
+          <span class="pill pill-resistant"        onclick="filterResults('RESISTANT')">Resistant</span>
+          <span class="pill pill-review"           onclick="filterResults('REVIEW')">Review</span>
+        </div>
+      </div>
+
+      <div class="results-list" id="resultsList">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">No scan running</div>
+          <div class="empty-sub">Configure a target and select attack categories, then click <strong>Run Scan</strong> to start red-teaming.</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let allResults   = [];
+let activeFilter = 'ALL';
+let scanning     = false;
+let categories   = [];
+let abortCtrl    = null;
+
+const CIRC = 2 * Math.PI * 22;  // gauge circumference ≈ 138.2
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  // Toggle model options based on provider
+  document.getElementById('provider').addEventListener('change', function() {
+    const v = this.value;
+    document.getElementById('anthropicModels').style.display = v === 'anthropic' ? '' : 'none';
+    document.getElementById('openaiModels').style.display    = v === 'openai'    ? '' : 'none';
+    // Select first visible option
+    const sel = document.getElementById('model');
+    for (const opt of sel.options) {
+      if (!opt.parentElement.style.display || opt.parentElement.style.display !== 'none') {
+        sel.value = opt.value;
+        break;
+      }
+    }
+  });
+
+  // Load categories
+  try {
+    const res = await fetch('/api/categories');
+    categories = await res.json();
+    renderCategories(categories);
+  } catch (e) {
+    console.error('Failed to load categories', e);
+  }
+}
+
+function renderCategories(cats) {
+  const grid = document.getElementById('categoryGrid');
+  grid.innerHTML = '';
+  cats.forEach(cat => {
+    const item = document.createElement('label');
+    item.className = 'category-item checked';
+    item.innerHTML = `
+      <input type="checkbox" value="${cat.id}" checked onchange="onCatChange(this)">
+      <div class="cat-info">
+        <div class="cat-id">${cat.id}</div>
+        <div class="cat-name">${cat.label}</div>
+      </div>
+      <span class="cat-count">${cat.payload_count}p</span>
+    `;
+    grid.appendChild(item);
+  });
+}
+
+function onCatChange(cb) {
+  cb.closest('.category-item').classList.toggle('checked', cb.checked);
+}
+
+function toggleAll(checked) {
+  document.querySelectorAll('#categoryGrid input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    cb.closest('.category-item').classList.toggle('checked', checked);
+  });
+}
+
+// ── Scan ─────────────────────────────────────────────────────────
+function stopScan() {
+  if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+}
+
+async function startScan() {
+  if (scanning) return;
+
+  const provider      = document.getElementById('provider').value;
+  const model         = document.getElementById('model').value;
+  const apiKey        = document.getElementById('apiKey').value.trim();
+  const delay         = parseFloat(document.getElementById('delay').value) || 1;
+  const systemPrompt  = document.getElementById('systemPrompt').value.trim();
+
+  if (!apiKey) { alert('Please enter an API key.'); return; }
+
+  const selectedCats = Array.from(
+    document.querySelectorAll('#categoryGrid input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+
+  if (!selectedCats.length) { alert('Select at least one attack category.'); return; }
+
+  // Reset UI
+  allResults = [];
+  activeFilter = 'ALL';
+  document.getElementById('resultsList').innerHTML = '';
+  document.getElementById('chartSection').style.display = 'none';
+  updatePills();
+  updateStats({ VULNERABLE:0, PARTIAL:0, RESISTANT:0, REVIEW:0, ERROR:0 }, 0, 0, 0);
+
+  setScanning(true);
+
+  const body = { provider, model, api_key: apiKey, categories: selectedCats, delay };
+  if (systemPrompt) body.system_prompt = systemPrompt;
+
+  abortCtrl = new AbortController();
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: abortCtrl.signal,
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      alert('Error: ' + (err.error || resp.statusText));
+      setScanning(false);
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE messages from buffer
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        parseSSEChunk(raw);
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      console.info('Scan stopped by user.');
+    } else {
+      console.error('Scan error', e);
+      alert('Scan failed: ' + e.message);
+    }
+  } finally {
+    abortCtrl = null;
+    setScanning(false);
+  }
+}
+
+function parseSSEChunk(raw) {
+  let eventType = 'message';
+  let data = '';
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event: '))      eventType = line.slice(7).trim();
+    else if (line.startsWith('data: '))  data = line.slice(6).trim();
+  }
+  if (!data) return;
+  try {
+    const payload = JSON.parse(data);
+    handleEvent(eventType, payload);
+  } catch (e) {
+    console.warn('Failed to parse SSE data', data);
+  }
+}
+
+function handleEvent(type, data) {
+  if (type === 'scan_start') {
+    document.getElementById('progressWrap').style.display = '';
+    updateProgress(0, data.total_payloads);
+  } else if (type === 'result') {
+    allResults.push(data);
+    renderResult(data);
+    updateProgress(data.index, data.total);
+    // Live stats
+    const stats = { VULNERABLE:0, PARTIAL:0, RESISTANT:0, REVIEW:0, ERROR:0 };
+    allResults.forEach(r => { const s = r.analysis.status; stats[s] = (stats[s]||0) + 1; });
+    updateStats(stats, allResults.length, 0, null);
+  } else if (type === 'scan_end') {
+    updateStats(data.stats, data.total_payloads, data.risk_score, data.severity_counts);
+    renderChart(data.stats);
+    document.getElementById('progressWrap').style.display = 'none';
+  } else if (type === 'error') {
+    alert('Scan error: ' + data.message);
+  }
+}
+
+// ── Rendering ────────────────────────────────────────────────────
+function renderResult(data) {
+  const { payload, analysis, response_preview, elapsed_ms } = data;
+  const status = analysis.status;
+
+  const card = document.createElement('div');
+  card.className = `result-card status-${status}`;
+  card.dataset.status = status;
+
+  const confColor = {
+    VULNERABLE: 'var(--vuln)', PARTIAL: 'var(--partial)',
+    RESISTANT: 'var(--resistant)', REVIEW: 'var(--review)', ERROR: 'var(--error)'
+  }[status] || 'var(--muted)';
+
+  const detectedHtml = payload.detection_signals && payload.detection_signals.length
+    ? payload.detection_signals.map(s => {
+        const hit = analysis.detected_signals && analysis.detected_signals.includes(s);
+        return `<span class="signal-tag${hit?' hit':''}">${esc(s)}</span>`;
+      }).join('')
+    : '<span style="color:var(--muted);font-size:11px">None defined</span>';
+
+  card.innerHTML = `
+    <div class="result-header" onclick="toggleCard(this.parentElement)">
+      <span class="status-badge ${status}">${status}</span>
+      <span class="result-name">${esc(payload.name)}</span>
+      <div class="result-meta">
+        <span class="sev-dot ${payload.severity}"></span>
+        <span>${payload.severity}</span>
+        <span style="color:var(--border)">|</span>
+        <span>${payload.category}</span>
+        <span style="color:var(--border)">|</span>
+        <span>${elapsed_ms}ms</span>
+      </div>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="result-body">
+      <div class="result-section-title">Description</div>
+      <div class="result-description">${esc(payload.description)}</div>
+
+      <div class="result-section-title">Payload Sent</div>
+      <pre>${esc(payload.prompt)}</pre>
+
+      <div class="result-section-title">Response Preview</div>
+      <pre>${esc(response_preview || analysis.error || '(no response)')}</pre>
+
+      <div class="result-section-title">
+        Detection Signals
+        <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px;">
+          — highlighted if triggered
+        </span>
+      </div>
+      <div class="signals">${detectedHtml}</div>
+
+      <div class="result-section-title">Confidence — ${analysis.confidence}%</div>
+      <div class="confidence-bar">
+        <div class="confidence-fill" style="width:${analysis.confidence}%;background:${confColor}"></div>
+      </div>
+    </div>
+  `;
+
+  if (activeFilter !== 'ALL' && status !== activeFilter) {
+    card.style.display = 'none';
+  }
+
+  // Remove empty state if present
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+
+  document.getElementById('resultsList').appendChild(card);
+  // Auto-scroll to latest
+  const list = document.getElementById('resultsList');
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderChart(stats) {
+  // Aggregate vulnerable counts per category
+  const catMap = {};
+  allResults.forEach(r => {
+    const cat = r.payload.category;
+    if (!catMap[cat]) catMap[cat] = { total: 0, vuln: 0 };
+    catMap[cat].total++;
+    if (r.analysis.status === 'VULNERABLE') catMap[cat].vuln++;
+  });
+
+  const section = document.getElementById('chartSection');
+  const chart   = document.getElementById('barChart');
+  chart.innerHTML = '';
+
+  const maxVuln = Math.max(1, ...Object.values(catMap).map(v => v.vuln));
+
+  Object.entries(catMap).sort((a,b) => b[1].vuln - a[1].vuln).forEach(([cat, v]) => {
+    const pct = Math.round((v.vuln / maxVuln) * 100);
+    const color = v.vuln === 0 ? 'var(--resistant)' : v.vuln >= 2 ? 'var(--vuln)' : 'var(--partial)';
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <span class="bar-cat-id">${cat}</span>
+      <div class="bar-outer"><div class="bar-inner" style="width:${pct}%;background:${color}"></div></div>
+      <span class="bar-count">${v.vuln}/${v.total}</span>
+    `;
+    chart.appendChild(row);
+  });
+
+  section.style.display = '';
+}
+
+function toggleCard(card) {
+  card.classList.toggle('expanded');
+}
+
+function filterResults(status) {
+  activeFilter = status;
+  updatePills();
+  document.querySelectorAll('.result-card').forEach(card => {
+    card.style.display = (status === 'ALL' || card.dataset.status === status) ? '' : 'none';
+  });
+}
+
+function updatePills() {
+  document.querySelectorAll('.filter-pills .pill').forEach(pill => {
+    pill.classList.remove('active');
+  });
+  const map = {
+    ALL: '.pill-all', VULNERABLE: '.pill-vuln', PARTIAL: '.pill-partial',
+    RESISTANT: '.pill-resistant', REVIEW: '.pill-review'
+  };
+  const sel = map[activeFilter];
+  if (sel) document.querySelector(sel)?.classList.add('active');
+}
+
+function updateStats(stats, total, riskScore, severityCounts) {
+  document.getElementById('statTotal').textContent    = total;
+  document.getElementById('statVuln').textContent     = stats.VULNERABLE || 0;
+  document.getElementById('statPartial').textContent  = stats.PARTIAL    || 0;
+  document.getElementById('statResistant').textContent= stats.RESISTANT  || 0;
+  document.getElementById('statReview').textContent   = stats.REVIEW     || 0;
+
+  if (riskScore !== null) {
+    const score = riskScore || 0;
+    const fill  = document.getElementById('gaugeFill');
+    const offset = CIRC - (score / 100) * CIRC;
+    fill.style.strokeDashoffset = offset;
+    fill.style.stroke = score >= 70 ? 'var(--vuln)' : score >= 40 ? 'var(--partial)' : 'var(--resistant)';
+    document.getElementById('gaugeText').textContent = score;
+  }
+}
+
+function updateProgress(current, total) {
+  const pct = total ? Math.round((current / total) * 100) : 0;
+  document.getElementById('progressBar').style.width  = pct + '%';
+  document.getElementById('progressText').textContent = `${current} / ${total}`;
+}
+
+function setScanning(active) {
+  scanning = active;
+  const dot     = document.getElementById('statusDot');
+  const label   = document.getElementById('statusLabel');
+  const btn     = document.getElementById('scanBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  dot.className = 'status-dot' + (active ? ' scanning' : ' done');
+  label.textContent = active ? 'Scanning…' : 'Done';
+  btn.disabled = active;
+  btn.textContent = active ? '⏳ Scanning…' : '⚡ Run Scan';
+  stopBtn.disabled = !active;
+  stopBtn.style.color = active ? 'var(--vuln)' : 'var(--muted)';
+}
+
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
