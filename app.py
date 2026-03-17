@@ -277,6 +277,18 @@ def api_health():
     return jsonify({"status": "ok", "version": "1.0.0"}), 200
 
 
+@app.route("/api/keys-status")
+def api_keys_status():
+    """Return which API keys are configured (without exposing them)."""
+    claude_key = os.getenv("CLAUDE_API_KEY", "").strip()
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    return jsonify({
+        "claude_available": bool(claude_key),
+        "openai_available": bool(openai_key),
+        "default_provider": "anthropic" if claude_key else "openai" if openai_key else None,
+    })
+
+
 @app.route("/api/categories")
 def api_categories():
     """Return all OWASP LLM Top 10 categories with payload metadata."""
@@ -301,7 +313,7 @@ def api_scan():
     Expected JSON body:
     {
       "provider":    "anthropic" | "openai",
-      "api_key":     "<user-supplied key>",
+      "api_key":     "<user-supplied key>" (optional; uses .env if omitted),
       "model":       "claude-sonnet-4-6" | "gpt-4o" | etc.,
       "categories":  ["LLM01", "LLM06", ...],   // optional; omit for all
       "delay":       1.0                          // seconds between requests (optional)
@@ -325,8 +337,16 @@ def api_scan():
     # Validate required fields
     if provider not in ("openai", "anthropic"):
         return jsonify({"error": "provider must be 'openai' or 'anthropic'."}), 400
+    
+    # If no API key provided, try to use one from .env
     if not api_key:
-        return jsonify({"error": "api_key is required."}), 400
+        if provider == "anthropic":
+            api_key = os.getenv("CLAUDE_API_KEY", "").strip()
+        elif provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    
+    if not api_key:
+        return jsonify({"error": f"api_key is required (or set {provider.upper()}_API_KEY in .env)."}), 400
     if not model:
         return jsonify({"error": "model is required."}), 400
     if not isinstance(categories, list) or not categories:

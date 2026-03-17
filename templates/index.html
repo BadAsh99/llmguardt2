@@ -783,11 +783,33 @@ let activeFilter = 'ALL';
 let scanning     = false;
 let categories   = [];
 let abortCtrl    = null;
+let keysAvailable = { claude: false, openai: false };
+let defaultProvider = null;
 
 const CIRC = 2 * Math.PI * 22;  // gauge circumference ≈ 138.2
 
 // ── Init ─────────────────────────────────────────────────────────
 async function init() {
+  // Check which API keys are available in .env
+  try {
+    const res = await fetch('/api/keys-status');
+    const status = await res.json();
+    keysAvailable.claude = status.claude_available;
+    keysAvailable.openai = status.openai_available;
+    defaultProvider = status.default_provider;
+    
+    // Update UI based on key availability
+    const apiKeyInput = document.getElementById('apiKey');
+    if (keysAvailable.claude || keysAvailable.openai) {
+      apiKeyInput.style.opacity = '0.5';
+      apiKeyInput.placeholder = '(auto-filled from .env)';
+      apiKeyInput.disabled = true;
+      apiKeyInput.value = '';
+    }
+  } catch (e) {
+    console.warn('Failed to check key status', e);
+  }
+
   // Toggle model options based on provider
   document.getElementById('provider').addEventListener('change', function() {
     const v = this.value;
@@ -856,7 +878,12 @@ async function startScan() {
   const delay         = parseFloat(document.getElementById('delay').value) || 1;
   const systemPrompt  = document.getElementById('systemPrompt').value.trim();
 
-  if (!apiKey) { alert('Please enter an API key.'); return; }
+  // Check if API key is provided or available from .env
+  const hasKey = apiKey || 
+    (provider === 'anthropic' && keysAvailable.claude) || 
+    (provider === 'openai' && keysAvailable.openai);
+  
+  if (!hasKey) { alert(`Please enter an API key or set ${provider.toUpperCase()}_API_KEY in .env`); return; }
 
   const selectedCats = Array.from(
     document.querySelectorAll('#categoryGrid input[type=checkbox]:checked')
@@ -874,7 +901,9 @@ async function startScan() {
 
   setScanning(true);
 
-  const body = { provider, model, api_key: apiKey, categories: selectedCats, delay };
+  // Only include api_key in body if user provided one; otherwise let backend use .env
+  const body = { provider, model, categories: selectedCats, delay };
+  if (apiKey) body.api_key = apiKey;
   if (systemPrompt) body.system_prompt = systemPrompt;
 
   abortCtrl = new AbortController();
