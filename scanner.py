@@ -50,10 +50,10 @@ CATEGORY_LABELS = {
     OWASPCategory.LLM04_MODEL_DOS: "Model Denial of Service",
     OWASPCategory.LLM05_SUPPLY_CHAIN: "Supply Chain Vulnerabilities",
     OWASPCategory.LLM06_SENSITIVE_DISCLOSURE: "Sensitive Information Disclosure",
-    OWASPCategory.LLM07_INSECURE_PLUGIN: "Insecure Plugin Design",
+    OWASPCategory.LLM07_INSECURE_PLUGIN: "System Prompt Leakage",
     OWASPCategory.LLM08_EXCESSIVE_AGENCY: "Excessive Agency",
     OWASPCategory.LLM09_OVERRELIANCE: "Overreliance",
-    OWASPCategory.LLM10_MODEL_THEFT: "Model Theft",
+    OWASPCategory.LLM10_MODEL_THEFT: "Unbounded Consumption",
 }
 
 
