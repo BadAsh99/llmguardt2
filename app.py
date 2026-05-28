@@ -99,6 +99,7 @@ def _call_anthropic(prompt: str, api_key: str, model: str, system_prompt: str = 
     headers = {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "Content-Type": "application/json",
     }
     body: dict = {
@@ -107,7 +108,16 @@ def _call_anthropic(prompt: str, api_key: str, model: str, system_prompt: str = 
         "messages": [{"role": "user", "content": prompt}],
     }
     if system_prompt:
-        body["system"] = system_prompt
+        # Structure as content block so cache_control is honoured.
+        # First call per session writes the cache; subsequent calls (all 34
+        # payloads after the first) read it at $0.30/MTok vs $3.00/MTok — 90% savings.
+        body["system"] = [
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
     resp = requests.post(
         "https://api.anthropic.com/v1/messages",
         headers=headers,
