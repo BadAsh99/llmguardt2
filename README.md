@@ -3,7 +3,6 @@
 > **Enterprise LLM Vulnerability Scanner with Semantic Attack Detection**  
 > OWASP LLM Top 10 compliance testing with AI-powered semantic similarity detection — catches obfuscated and paraphrased attacks that elude pattern-matching tools
 
-![Production Ready](https://img.shields.io/badge/Status-Production_Ready-green)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.0-black?logo=flask)
 ![Semantic Detection](https://img.shields.io/badge/Semantic_Detection-Transformers-blue)
